@@ -1,54 +1,56 @@
+from typing import List
+from urllib import response
+from fastapi import FastAPI,Depends
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 
-import  datetime
-from typing import Optional,List
-from fastapi import FastAPI
-from pydantic import BaseModel, Field 
+from . import crud, models, schemas
+from .database import SessionLocal, engine
 
-
-class PlantMsg(BaseModel):
-    update_time : datetime.datetime
-    temMsg: Optional[str] = None
-    rainMsg: Optional[str] = None
-
-class AlerMsg(BaseModel):
-    update_time : datetime.datetime
-    alercontent : Optional[str] = None
+models.Base.metadate.create_all(bind=engine)
 
 app =FastAPI()
 
-plant_db : List[PlantMsg] =[
-    PlantMsg(
-        update_time='2022-01-26T13:00:00+00:00',
-        temMsg='在生長期間溫度 較去年同期小幅度上升1~2°C，但整個生長期間的每月溫度均溫還在洋蔥耐熱範圍(15~26°C)。',
-        rainMsg='在生長期間雨量，整個生長期間的每月平均降雨量在洋蔥雨量接受範圍(10mm以下)，雨量正常，期間內適宜栽種洋蔥。')
+origins = [
+    "http://localhost.tiangolo.com",
+    "https://localhost.tiangolo.com",
+    "http://localhost",
+    "http://localhost:8080",
 ]
 
-AlerMsg_db : List[AlerMsg] =[
-    AlerMsg(
-        update_time='2022-01-26T13:00:00+00:00',
-        alercontent ='颱風圓規昨晚(10日)在鵝鑾鼻東南方海面，暴風圈正擴大，中央氣象局昨晚發布海上颱風警報，雖不會登陸台灣，外圍環流將影響台灣9縣市有豪雨發生，恆春半島預估會下100至200毫米的雨量，目前正值洋蔥株苗栽種時間，利用巧固架育苗的農民可以盡快搬往集貨場。苗齡已達40~45天以上之苗圃採後苗株整理成束，以報紙包覆直立放置塑膠籃中以5℃冰存，等待適合的天候再行種植，避免苗株受損。',
-        )
-]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-
-@app.get('/Remind/plant')
-async def Get_PlantMsg():
-    return plant_db
-
-@app.get('/Remind/aler')
-async  def Get_AlerMsg():
-    return AlerMsg_db
-
-#create
-@app.post('/Remind/plant')
-async  def PlantMsg(plantMsg:PlantMsg):
-    plant_db.append(plantMsg)
+#read
+@app.get('/Remind/plant', response_model= List[schemas.PlantMsg])
+async def Get_PlantMsg(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    plantMsg = crud.getPlantMsg(db,skip=skip,limit=limit)
     return plantMsg
 
-
-@app.post('/Remind/aler')
-async  def AlerMsg(alerMsg:AlerMsg):
-    AlerMsg_db.append(alerMsg)
+@app.get('/Remind/aler', response_model= List[schemas.AlerMsg])
+async  def Get_AlerMsg(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    alerMsg = crud.getAlerMsg(db,skip=skip,limit=limit)
     return alerMsg
+
+#create
+@app.post('/Remind/plant',response_model=schemas.PlantMsg)
+async  def PlantMsg(plantMsg: schemas.PlantMsg, db: Session = Depends(get_db)):
+    return crud.create_AlerMsg(db=db, plantMsg=plantMsg)
+
+
+@app.post('/Remind/aler',response_model=schemas.AlerMsg)
+async  def AlerMsg(alerMsg: schemas.AlerMsg , db: Session = Depends(get_db)):
+    return crud.create_AlerMsg(db=db, alerMsg=alerMsg)
 
